@@ -15,6 +15,8 @@ HTTPClient http;
 int retry = 0;
 uint64_t lastTime = 0;
 
+std::optional<uint64_t> millisBlinkingStarted = 0;
+
 JsonDocument doc;
 
 bool backDoorLocked = false;
@@ -98,7 +100,7 @@ void loop()
   if (lastTime == 0 || millis() - lastTime > 1000)
   {
     http.begin("http://realraum.at/status.json");
-    http.setTimeout(200);
+    http.setTimeout(1000);
     int httpCode = http.GET();
 
     lastTime = millis();
@@ -143,13 +145,18 @@ void loop()
 #endif
   }
 
-  bool blink = millis() % 300 < 150;
+  bool stayOn = millisBlinkingStarted && millis() - millisBlinkingStarted.value() > 5000;
+
+  bool irgendwasBlinktlol = false;
+
+  bool blink = stayOn || (millis() % 300 < 150);
 
   std::fill(dingsbums.begin(), dingsbums.end(), CRGB::Black);
 
   // w2 soll das machen: wenn alles zu, rot. sonst grün
   if (w2ajar) {
     setDingsbums(HINTEN_INDEX, blink ? CRGB::Blue : CRGB::Black);
+    irgendwasBlinktlol = true;
   } else if (w2Locked) {
     setDingsbums(HINTEN_INDEX, CRGB::Red);
   } else {
@@ -158,12 +165,19 @@ void loop()
 
   if (w1ajar) {
     setDingsbums(VORNE_INDEX, blink ? CRGB::Blue : CRGB::Black);
+    irgendwasBlinktlol = true;
   } else if (frontDoorLocked && !backDoorLocked) {
     setDingsbums(VORNE_INDEX, CRGB::Orange);
   } else if (frontDoorLocked && backDoorLocked) {
     setDingsbums(VORNE_INDEX, CRGB::Red);
   } else {
     setDingsbums(VORNE_INDEX, CRGB::Green);
+  }
+
+  if (irgendwasBlinktlol && !millisBlinkingStarted) {
+    millisBlinkingStarted = millis();
+  } else if (!irgendwasBlinktlol && millisBlinkingStarted) {
+    millisBlinkingStarted = std::nullopt;
   }
 
   FastLED.show();
