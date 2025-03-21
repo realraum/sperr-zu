@@ -20,5 +20,8 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
+      - name: Copy env file
+        run: cp default.env .env
+
       - name: Build PlatformIO Project
         run: pio run
