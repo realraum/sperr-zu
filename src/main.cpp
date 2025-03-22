@@ -90,9 +90,9 @@ void callback(char* topic, byte* payload, unsigned int length)
   }
 
   // ==== MQTT ====
-  // backDoorLocked: topic: "realraum/backdoorcx/lock", from payload: x.Lock
-  // frontDoorLocked: topic: "realraum/frontdoor/lock", from payload: x.Lock
-  // w2Locked: topic: "realraum/w2frontdoor/lock", from payload: x.Lock
+  // backDoorLocked: topic: "realraum/backdoorcx/lock", from payload: x.Locked
+  // frontDoorLocked: topic: "realraum/frontdoor/lock", from payload: x.Locked
+  // w2Locked: topic: "realraum/w2frontdoor/lock", from payload: x.Locked
 
   // w1ajar-0: topic: "realraum/frontdoor/ajar", from payload: x.Shut
   // w1ajar-1: topic: "realraum/backdoorcx/ajar", from payload: x.Shut
@@ -107,9 +107,9 @@ void callback(char* topic, byte* payload, unsigned int length)
       return; \
     }
 
-  TOPIC_CASE("realraum/backdoorcx/lock", backDoorLocked = doc["Lock"]);
-  TOPIC_CASE("realraum/frontdoor/lock", frontDoorLocked = doc["Lock"]);
-  TOPIC_CASE("realraum/w2frontdoor/lock", w2Locked = doc["Lock"]);
+  TOPIC_CASE("realraum/backdoorcx/lock", backDoorLocked = doc["Locked"]);
+  TOPIC_CASE("realraum/frontdoor/lock", frontDoorLocked = doc["Locked"]);
+  TOPIC_CASE("realraum/w2frontdoor/lock", w2Locked = doc["Locked"]);
   TOPIC_CASE("realraum/frontdoor/ajar", w1frontAjar = doc["Shut"]);
   TOPIC_CASE("realraum/backdoorcx/ajar", w1backAjar = doc["Shut"]);
   TOPIC_CASE("realraum/w2frontdoor/ajar", w2ajar = doc["Shut"]);
@@ -142,9 +142,6 @@ void setup()
   FastLED.show();
 
   Serial.begin(115200);
-
-  while (!Serial)
-    ;
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   WiFi.setHostname("dingsbums");
@@ -211,7 +208,12 @@ void loop()
       {
         Serial.println("Connected to MQTT");
 
-        client.subscribe("realraum/#");
+        client.subscribe("realraum/backdoorcx/lock");
+        client.subscribe("realraum/frontdoor/lock");
+        client.subscribe("realraum/w2frontdoor/lock");
+        client.subscribe("realraum/frontdoor/ajar");
+        client.subscribe("realraum/backdoorcx/ajar");
+        client.subscribe("realraum/w2frontdoor/ajar");
 
         client.publish(MQTT_TOPIC, ONLINE_PAYLOAD);
       }
@@ -223,6 +225,8 @@ void loop()
       }
     }
   }
+
+  client.loop();
 #endif
 
 #ifdef USE_HTTP
@@ -256,11 +260,11 @@ void loop()
       w2Locked = doc["sensors"]["door_locked"][2]["value"];
 
       // w2 ajar = x.sensors.ext_door_ajar[0].value
-      w2ajar = !doc["sensors"]["ext_door_ajar"][0]["value"];
+      w2ajar = doc["sensors"]["ext_door_ajar"][0]["value"];
 
       // w1 ajar = !x.sensors.ext_door_ajar[4].value || !x.sensors.ext_door_ajar[5].value
-      w1frontAjar = !doc["sensors"]["ext_door_ajar"][4]["value"];
-      w1backAjar = !doc["sensors"]["ext_door_ajar"][5]["value"];
+      w1frontAjar = doc["sensors"]["ext_door_ajar"][4]["value"];
+      w1backAjar = doc["sensors"]["ext_door_ajar"][5]["value"];
     }
     else
     {
@@ -286,8 +290,10 @@ void loop()
 
   std::fill(dingsbums.begin(), dingsbums.end(), CRGB::Black);
 
+  Serial.printf("w2ajar: %d, w2Locked: %d, w1frontAjar: %d, w1backAjar: %d, frontDoorLocked: %d, backDoorLocked: %d\n", w2ajar, w2Locked, w1frontAjar, w1backAjar, frontDoorLocked, backDoorLocked);
+
   // w2 soll das machen: wenn alles zu, rot. sonst grün
-  if (w2ajar) {
+  if (!w2ajar) {
     setDingsbums(HINTEN_INDEX, blink ? CRGB::Blue : CRGB::Black);
     irgendwasBlinktlol = true;
   } else if (w2Locked) {
@@ -296,7 +302,7 @@ void loop()
     setDingsbums(HINTEN_INDEX, CRGB::Green);
   }
 
-  if (w1frontAjar || w1backAjar) {
+  if (!w1frontAjar || !w1backAjar) {
     setDingsbums(VORNE_INDEX, blink ? CRGB::Blue : CRGB::Black);
     irgendwasBlinktlol = true;
   } else if (frontDoorLocked && !backDoorLocked) {
