@@ -44,7 +44,8 @@ PubSubClient client(espClient);
 #define MQTT_SERVER "mqtt.realraum.at"
 #endif
 
-int retry = 0;
+uint8_t retry = 0;
+uint8_t mqttRetry = 0;
 
 uint64_t lastPublish = 0;
 
@@ -190,7 +191,6 @@ void loop()
 
     if (retry > 5)
     {
-      delay(5000);
       ESP.restart();
       return;
     }
@@ -220,12 +220,13 @@ void loop()
 
     while (!client.connected())
     {
-      if (retry > 5)
+      if (mqttRetry > 5)
       {
-        delay(5000);
         ESP.restart();
         return;
       }
+
+      mqttRetry++;
 
       std::fill(dingsbums.begin(), dingsbums.end(), CRGB::Purple);
       FastLED.show();
@@ -253,10 +254,10 @@ void loop()
       }
     }
   }
-  else if (retry > 0)
+  else if (mqttRetry > 0)
   {
     Serial.println("Connected to MQTT");
-    retry = 0;
+    mqttRetry = 0;
   }
 
   if (const auto now = millis(); now - lastPublish > 2500)
