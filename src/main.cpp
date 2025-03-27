@@ -23,6 +23,7 @@
 #include <array>
 #include <optional>
 #include <FastLED.h>
+#include <ESPmDNS.h>
 
 #define DEBUG
 
@@ -36,13 +37,16 @@ uint64_t lastTime = 0;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-#define MQTT_TOPIC "realraum/sperrzu/online"
+#define MQTT_BASE "realraum/sperrzu"
+#define MQTT_TOPIC MQTT_BASE "/dingsbums"
 #define ONLINE_PAYLOAD "{\"online\":true}"
 #define OFFLINE_PAYLOAD "{\"online\":false}"
 #define MQTT_SERVER "mqtt.realraum.at"
 #endif
 
 int retry = 0;
+
+uint64_t lastPublish = 0;
 
 std::optional<uint64_t> millisBlinkingStarted = 0;
 
@@ -138,8 +142,11 @@ void setup()
 {
   FastLED.addLeds<NEOPIXEL, LED_PIN>(dingsbums.data(), NUM_LEDS);
 
-  std::fill(dingsbums.begin(), dingsbums.end(), CRGB::White);
+  // std::fill(dingsbums.begin(), dingsbums.end(), CRGB::White);
+  fill_rainbow(dingsbums.data(), NUM_LEDS, 0, 255 / NUM_LEDS);
   FastLED.show();
+
+  delay(5000);
 
   Serial.begin(115200);
 
@@ -152,6 +159,15 @@ void setup()
   {
     delay(500);
     Serial.printf("Connecting to WiFi %s...\n", WIFI_SSID);
+  }
+
+  if (!MDNS.begin("dingsbums"))
+  {
+    Serial.println("Error setting up MDNS responder!");
+  }
+  else
+  {
+    Serial.println("MDNS responder started");
   }
 
   Serial.println("Connected to the WiFi network");
@@ -191,6 +207,11 @@ void loop()
     delay(5000);
     retry++;
   }
+  else if (WiFi.status() == WL_CONNECTED && retry > 0)
+  {
+    Serial.println("Connected to WiFi");
+    retry = 0;
+  }
 
 #ifdef USE_MQTT
   if (!client.connected())
@@ -199,7 +220,14 @@ void loop()
 
     while (!client.connected())
     {
-      std::fill(dingsbums.begin(), dingsbums.end(), CRGB::White);
+      if (retry > 5)
+      {
+        delay(5000);
+        ESP.restart();
+        return;
+      }
+
+      std::fill(dingsbums.begin(), dingsbums.end(), CRGB::Purple);
       FastLED.show();
 
       Serial.println("Connecting to MQTT...");
@@ -224,6 +252,23 @@ void loop()
         delay(2000);
       }
     }
+  }
+  else if (retry > 0)
+  {
+    Serial.println("Connected to MQTT");
+    retry = 0;
+  }
+
+  if (const auto now = millis(); now - lastPublish > 2500)
+  {
+    lastPublish = now;
+
+    // wifi status should have rssi, ip, status
+    std::string wifiStatus = "{\"rssi\":" + std::to_string(WiFi.RSSI()) + ",\"ip\":\"" + WiFi.localIP().toString().c_str() + "\",\"status\":" + std::to_string(WiFi.status()) + "}";
+    client.publish(MQTT_BASE "/wifi", wifiStatus.c_str());
+
+    std::string uptimeStatus = "{\"uptime\":" + std::to_string(millis() / 1000) + "}";
+    client.publish(MQTT_BASE "/uptime", uptimeStatus.c_str());
   }
 
   client.loop();
