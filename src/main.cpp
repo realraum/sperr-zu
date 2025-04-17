@@ -156,10 +156,31 @@ void setup()
   WiFi.setAutoReconnect(false);
   WiFi.persistent(false);
 
+  uint8_t brightness = 255;
+  bool direction = true;
+
   while (WiFi.status() != WL_CONNECTED)
   {
-    delay(500);
+    delay(100);
+
+    if (brightness == 0)
+    {
+      direction = !direction;
+    }
+
+    brightness += direction ? 1 : -1;
+
+    FastLED.setBrightness(brightness);
+
     Serial.printf("Connecting to WiFi %s...\n", WIFI_SSID);
+
+    // if millis() is greater than 1 minute, reboot
+    if (millis() > 60000)
+    {
+      Serial.println("Rebooting...");
+      ESP.restart();
+      return;
+    }
   }
 
   if (!MDNS.begin("dingsbums"))
